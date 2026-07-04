@@ -1,0 +1,12 @@
+{
+  "drone_name": "BetaFPV Air75 II Champion",
+  "battery": {
+    "cell_count": 1,
+    "full_voltage": 4.35,
+    "empty_voltage": 3.0,
+    "warn_voltage": 3.3
+  },
+  "serial": {
+    "baudrate": 115200
+  }
+}

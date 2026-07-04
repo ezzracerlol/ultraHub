@@ -1,0 +1,10 @@
+[
+  {
+    "name": "BetaFPV Air75 II Champion",
+    "size": "1S Whoop 75mm",
+    "cell_count": 1,
+    "full_voltage": 4.35,
+    "empty_voltage": 3.0,
+    "warn_voltage": 3.3
+  }
+]
