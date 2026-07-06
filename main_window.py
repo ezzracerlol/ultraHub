@@ -37,6 +37,7 @@ from cycles_widget import CyclesWidget
 from checklist_widget import ChecklistWidget
 from weather_widget import WeatherWidget
 from osd_widget import OSDWidget
+from dashboard_widget import SportDashboard
 
 
 class MainWindow(QMainWindow):
@@ -89,20 +90,11 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
 
-        dashboard = QWidget()
-        dash_layout = QVBoxLayout(dashboard)
-        self.battery_widget = BatteryWidget(
-            full_v=self.active_profile.get("full_voltage", 4.35),
-            empty_v=self.active_profile.get("empty_voltage", 3.0),
-            warn_v=self.active_profile.get("warn_voltage", 3.3),
-        )
-        dash_layout.addWidget(self.battery_widget)
-        dash_layout.addStretch()
-
-        self.system_widget    = SystemWidget()
-        self.drone_3d         = Drone3DWidget()
-        self.rc_widget        = RCWidget()
-        self.motors_widget    = MotorsWidget()
+        self.sport_dash    = SportDashboard()
+        self.system_widget = SystemWidget()
+        self.drone_3d      = Drone3DWidget()
+        self.rc_widget     = RCWidget()
+        self.motors_widget = MotorsWidget()
         self.attitude_widget  = AttitudeWidget()
         self.gps_widget       = GpsMapWidget()
         self.osd_widget       = OSDWidget()
@@ -114,24 +106,30 @@ class MainWindow(QMainWindow):
         self.checklist_widget = ChecklistWidget()
         self.weather_widget   = WeatherWidget()
         self.profiles_widget  = ProfilesWidget()
+        self.battery_widget   = BatteryWidget(
+            full_v=self.active_profile.get("full_voltage", 4.35),
+            empty_v=self.active_profile.get("empty_voltage", 3.0),
+            warn_v=self.active_profile.get("warn_voltage", 3.3),
+        )
+
         self.profiles_widget.profile_selected.connect(self._apply_profile)
 
-        self.tabs.addTab(dashboard,               "Дашборд")
-        self.tabs.addTab(self.system_widget,      "Система")
-        self.tabs.addTab(self.drone_3d,           "3D Модель")
-        self.tabs.addTab(self.rc_widget,          "RC Каналы")
-        self.tabs.addTab(self.motors_widget,      "Моторы")
-        self.tabs.addTab(self.attitude_widget,    "Горизонт")
-        self.tabs.addTab(self.gps_widget,         "GPS Карта")
-        self.tabs.addTab(self.osd_widget,         "OSD")
-        self.tabs.addTab(self.video_widget,       "Видео")
-        self.tabs.addTab(self.logs_widget,        "Логи")
-        self.tabs.addTab(self.stats_widget,       "Статистика")
-        self.tabs.addTab(self.history_widget,     "История")
-        self.tabs.addTab(self.cycles_widget,      "Батареи")
-        self.tabs.addTab(self.checklist_widget,   "Чеклист")
-        self.tabs.addTab(self.weather_widget,     "Погода")
-        self.tabs.addTab(self.profiles_widget,    "Профили")
+        self.tabs.addTab(self.sport_dash,      "Дашборд")
+        self.tabs.addTab(self.system_widget,   "Система")
+        self.tabs.addTab(self.drone_3d,        "3D Модель")
+        self.tabs.addTab(self.rc_widget,       "RC Каналы")
+        self.tabs.addTab(self.motors_widget,   "Моторы")
+        self.tabs.addTab(self.attitude_widget, "Горизонт")
+        self.tabs.addTab(self.gps_widget,      "GPS Карта")
+        self.tabs.addTab(self.osd_widget,      "OSD")
+        self.tabs.addTab(self.video_widget,    "Видео")
+        self.tabs.addTab(self.logs_widget,     "Логи")
+        self.tabs.addTab(self.stats_widget,    "Статистика")
+        self.tabs.addTab(self.history_widget,  "История")
+        self.tabs.addTab(self.cycles_widget,   "Батареи")
+        self.tabs.addTab(self.checklist_widget,"Чеклист")
+        self.tabs.addTab(self.weather_widget,  "Погода")
+        self.tabs.addTab(self.profiles_widget, "Профили")
 
         layout.addWidget(self.tabs)
         self.setCentralWidget(central)
@@ -181,6 +179,7 @@ class MainWindow(QMainWindow):
         self.battery_widget.warn_v = profile["warn_voltage"]
         self.battery_widget.empty_v = profile["empty_voltage"]
         self.weather_widget.set_profile(profile)
+        self.sport_dash.set_drone_name(profile.get("name", ""))
         self._update_texts()
 
     def refresh_ports(self):
@@ -191,6 +190,7 @@ class MainWindow(QMainWindow):
         self.connection_widget.set_connected_state(ok)
         if ok:
             self._fc_info_requested = False
+            self.sport_dash.set_port(port)
             self.poll_timer.start(250)
 
     def disconnect_serial(self):
@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         self.serial.disconnect()
         self.connection_widget.set_connected_state(False)
         self.battery_widget.reset()
+        self.sport_dash.reset()
 
     def _poll_telemetry(self):
         if not self.serial.is_connected():
@@ -230,6 +231,14 @@ class MainWindow(QMainWindow):
                     self.battery_widget.update_values(
                         data["voltage"], data["current"], data["mah_drawn"]
                     )
+                    self.sport_dash.update_voltage(
+                        data["voltage"],
+                        warn_v=self.active_profile.get("warn_voltage", 3.3),
+                        empty_v=self.active_profile.get("empty_voltage", 3.0),
+                        full_v=self.active_profile.get("full_voltage", 4.35),
+                    )
+                    self.sport_dash.update_current(data["current"], data["mah_drawn"])
+                    self.sport_dash.update_rssi(data["rssi_percent"])
                     self.stats_widget.add_point(data["voltage"], data["current"])
                     self.logs_widget.add_entry(
                         data["voltage"], data["current"], data["mah_drawn"]
@@ -246,15 +255,22 @@ class MainWindow(QMainWindow):
                         self.active_profile.get("empty_voltage", 3.0),
                     )
             elif command == MSP_FC_VARIANT:
-                self.system_widget.update_fc_info(variant=decode_fc_variant(payload))
+                v = decode_fc_variant(payload)
+                self.system_widget.update_fc_info(variant=v)
+                self.sport_dash.update_fc_info(variant=v)
             elif command == MSP_FC_VERSION:
-                self.system_widget.update_fc_info(version=decode_fc_version(payload))
+                v = decode_fc_version(payload)
+                self.system_widget.update_fc_info(version=v)
+                self.sport_dash.update_fc_info(version=v)
             elif command == MSP_BOARD_INFO:
-                self.system_widget.update_fc_info(board=decode_board_info(payload))
+                b = decode_board_info(payload)
+                self.system_widget.update_fc_info(board=b)
+                self.sport_dash.update_fc_info(board=b)
             elif command == MSP_STATUS_EX:
                 status = decode_status_ex(payload)
                 if status:
                     self.system_widget.update_status(status)
+                    self.sport_dash.update_status(status)
                     self.osd_widget.update_telemetry(
                         armed=status["armed"],
                         sats=len(status["sensors"]),
@@ -263,10 +279,12 @@ class MainWindow(QMainWindow):
                 channels = decode_rc(payload)
                 if channels:
                     self.rc_widget.update_channels(channels)
+                    self.sport_dash.update_rc(channels)
             elif command == MSP_MOTOR:
                 motors = decode_motor(payload)
                 if motors:
                     self.motors_widget.update_motors(motors)
+                    self.sport_dash.update_motors(motors)
             elif command == MSP_ATTITUDE:
                 att = decode_attitude(payload)
                 if att:
@@ -274,6 +292,9 @@ class MainWindow(QMainWindow):
                         att["roll"], att["pitch"], att["yaw"]
                     )
                     self.drone_3d.update_attitude(
+                        att["roll"], att["pitch"], att["yaw"]
+                    )
+                    self.sport_dash.update_attitude(
                         att["roll"], att["pitch"], att["yaw"]
                     )
                     self.osd_widget.update_telemetry(
